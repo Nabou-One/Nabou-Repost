@@ -1,0 +1,53 @@
+name: Fusion automatique universelle vers main
+
+on:
+  # Déclencheur : lorsqu'il y a un push sur une branche autre que main
+  push:
+    branches-ignore:
+      - main
+  # Déclencheur : lorsqu'une Pull Request vers main est ouverte, synchronisée ou rouverte
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write        # Autorise l’écriture dans le dépôt
+  pull-requests: write   # Autorise les actions sur les Pull Requests
+
+jobs:
+  merge-to-main:
+    runs-on: ubuntu-latest   # Exécute le job sur une machine Ubuntu
+
+    steps:
+      # Étape 1 : Récupérer le code du dépôt
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # Récupère tout l’historique Git (utile pour les merges)
+
+      # Étape 2 : Fusionner la branche source vers main
+      - name: Merge branch or PR into main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # Jeton d’authentification GitHub
+        run: |
+          # Configurer l’identité Git utilisée par le bot
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+
+          # Mettre à jour la branche main locale
+          git fetch origin
+          git checkout main
+          git pull origin main
+
+          # Déterminer la branche source (push ou pull request)
+          SRC_BRANCH="${{ github.head_ref || github.ref_name }}"
+          echo "Fusion de la branche $SRC_BRANCH vers main..."
+
+          # Fusionner la branche source dans main
+          # ⚠️ En cas de conflit, on privilégie la branche source
+          git merge "origin/$SRC_BRANCH" --no-edit -X theirs
+
+          # Pousser les changements vers main sur GitHub
+          git push origin main
+
