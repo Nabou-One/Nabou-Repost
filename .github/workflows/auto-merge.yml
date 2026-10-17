@@ -1,19 +1,20 @@
 name: Fusion automatique vers main
 
 on:
-  # Déclencheur : Pull Request vers main (ouverture, mise à jour, réouverture)
+  # Déclenchement lorsqu'une Pull Request vers main est ouverte ou modifiée
   pull_request:
     branches:
       - main
     types: [opened, synchronize, reopened, ready_for_review]
-  # Déclencheur : push sur une branche autre que main
+
+  # Déclenchement lorsqu'une branche autre que main reçoit un push
   push:
     branches-ignore:
       - main
 
 permissions:
-  contents: write        # Nécessaire pour pousser la résolution de conflit
-  pull-requests: write   # Nécessaire pour fusionner la Pull Request
+  contents: write
+  pull-requests: write
 
 concurrency:
   group: auto-merge-${{ github.event.pull_request.number || github.ref_name }}
@@ -22,85 +23,112 @@ concurrency:
 jobs:
   merge-to-main:
     runs-on: ubuntu-latest
+
+    # Ignorer les Pull Requests en brouillon
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
 
     steps:
-      # Étape 1 : Identifier la Pull Request à fusionner
-      - name: Identifier la Pull Request
-        id: pr
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            PR="${{ github.event.pull_request.number }}"
-          else
-            PR=$(gh pr list \
-                   --repo "${{ github.repository }}" \
-                   --head "${{ github.ref_name }}" \
-                   --state open \
-                   --json number \
-                   --jq '.[0].number')
-          fi
-          echo "number=$PR" >> "$GITHUB_OUTPUT"
-          echo "Pull Request détectée : $PR"
-
-      # Étape 2 : Récupérer la branche source
-      - name: Checkout de la branche source
-        if: steps.pr.outputs.number != ''
+      # Étape 1 : récupérer le dépôt
+      - name: Récupérer le dépôt
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref || github.ref_name }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Étape 3 : Résoudre les conflits en faveur de la branche source
-      - name: Résoudre les conflits en faveur de la branche source
-        if: steps.pr.outputs.number != ''
+      # Étape 2 : configurer Git
+      - name: Configurer Git
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+
+      # Étape 3 : fusionner une branche publiée sans Pull Request
+      - name: Fusionner la branche publiée directement dans main
+        if: github.event_name == 'push'
+        env:
+          BRANCHE: ${{ github.ref_name }}
+        run: |
+          echo "Branche détectée : $BRANCHE"
+
+          # Récupérer les dernières versions des branches
+          git fetch origin main
+          git fetch origin "$BRANCHE"
+
+          # Se placer sur main
+          git checkout -B main origin/main
+
+          # Fusionner la branche publiée dans main.
+          # En cas de conflit, privilégier les modifications de la branche source.
+          git merge "origin/$BRANCHE" --no-edit -X theirs
+
+          # Envoyer main mis à jour sur GitHub
+          git push origin main
+
+      # Étape 4 : identifier la Pull Request si le déclencheur est une PR
+      - name: Identifier la Pull Request
+        id: pr
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+
+      # Étape 5 : vérifier les conflits de la Pull Request
+      - name: Résoudre les conflits de la Pull Request
+        if: github.event_name == 'pull_request' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR="${{ steps.pr.outputs.number }}"
           REPO="${{ github.repository }}"
+          BRANCHE="${{ github.event.pull_request.head.ref }}"
 
-          # GitHub calcule l'état de fusion de façon asynchrone : on attend qu'il soit connu
+          # Attendre que GitHub calcule l'état de fusion
           STATE="UNKNOWN"
           for i in $(seq 1 10); do
             STATE=$(gh pr view "$PR" --repo "$REPO" --json mergeable --jq '.mergeable')
-            if [ "$STATE" != "UNKNOWN" ]; then break; fi
+            if [ "$STATE" != "UNKNOWN" ]; then
+              break
+            fi
             sleep 3
           done
+
           echo "État de fusion : $STATE"
 
-          if [ "$STATE" != "CONFLICTING" ]; then
-            echo "Aucun conflit à résoudre, on passe à la fusion."
-            exit 0
+          if [ "$STATE" = "CONFLICTING" ]; then
+            git fetch origin main
+            git fetch origin "$BRANCHE"
+
+            # Récupérer la branche source
+            git checkout -B "$BRANCHE" "origin/$BRANCHE"
+
+            # Fusionner main dans la branche source
+            git merge origin/main --no-edit -X ours
+
+            # Publier la résolution des conflits
+            git push origin HEAD:"$BRANCHE"
+          else
+            echo "Aucun conflit à résoudre."
           fi
 
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
-          git fetch origin main
-
-          # On fusionne main DANS la branche source.
-          # Ici "ours" désigne la branche source (branche courante) et "theirs" désigne main :
-          # -X ours fait donc gagner la branche source en cas de conflit.
-          git merge origin/main --no-edit -X ours
-          git push origin HEAD
-
-      # Étape 4 : Fusionner la Pull Request dans main
-      - name: Fusionner la Pull Request dans main
-        if: steps.pr.outputs.number != ''
+      # Étape 6 : fusionner la Pull Request dans main
+      - name: Fusionner la Pull Request
+        if: github.event_name == 'pull_request' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR="${{ steps.pr.outputs.number }}"
           REPO="${{ github.repository }}"
-          # Le push de l'étape précédente invalide brièvement l'état de fusion : on réessaie
+
+          # Réessayer jusqu'à cinq fois
           for i in $(seq 1 5); do
             if gh pr merge "$PR" --repo "$REPO" --merge --delete-branch; then
+              echo "Pull Request fusionnée avec succès."
               exit 0
             fi
-            echo "Fusion non aboutie (tentative $i), nouvel essai dans 10 s..."
+
+            echo "Tentative $i échouée. Nouvelle tentative dans 10 secondes."
             sleep 10
           done
-          echo "Échec de la fusion de la Pull Request $PR" >&2
+
+          echo "Impossible de fusionner la Pull Request." >&2
           exit 1
