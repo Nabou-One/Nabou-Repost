@@ -6,7 +6,7 @@ services:
     buildCommand: "bash build.sh"
     startCommand: "PATH=$PWD/bin:$PATH gunicorn nabou_repost.wsgi:application --bind 0.0.0.0:$PORT --worker-class gthread --workers 1 --threads 4 --timeout 180"
     healthCheckPath: /healthz
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - key: SECRET_KEY
         generateValue: true
