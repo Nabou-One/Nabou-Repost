@@ -1,0 +1,12 @@
+# Dépendances Python de Nabou-Repost
+Django>=6.1,<6.2
+yt-dlp>=2026.8.19
+youtube-transcript-api>=1.2.4
+
+# Production (Render)
+gunicorn>=22.0
+whitenoise>=6.7
+
+# yt-dlp : ffmpeg embarqué et imitation de navigateur
+imageio-ffmpeg>=0.5
+curl-cffi>=0.7

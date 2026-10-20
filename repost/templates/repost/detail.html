@@ -1,0 +1,157 @@
+{% extends "repost/base.html" %}
+
+{% block title %}{% if job.title %}{{ job.title }}{% else %}Téléchargement #{{ job.pk }}{% endif %} — Nabou Repost{% endblock %}
+
+{% block content %}
+<a class="back" href="{% url 'repost:index' %}">
+    <span aria-hidden="true">←</span> Nouveau téléchargement
+</a>
+
+<section
+    class="card job-header"
+    id="job"
+    data-status-url="{% url 'repost:status' job.pk %}"
+    data-finished="{{ job.is_finished|yesno:'true,false' }}"
+>
+    <div class="job-title-row">
+        <div>
+            <span class="eyebrow">Téléchargement #{{ job.pk }}</span>
+            <h1 id="job-title">{{ job.title|default:"Analyse de la vidéo…" }}</h1>
+            <a class="source-link" href="{{ job.url }}" target="_blank" rel="noopener noreferrer">{{ job.url }}</a>
+        </div>
+        <span id="job-status" class="status status-{{ job.status }}">{{ job.get_status_display }}</span>
+    </div>
+
+    <div class="progress-wrap">
+        <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ job.progress }}">
+            <div class="progress-bar{% if job.status == 'failed' %} progress-failed{% endif %}" id="job-progress" style="width: {{ job.progress }}%"></div>
+        </div>
+        <div class="progress-meta">
+            <span id="job-message">{{ job.message|default:"En attente de démarrage…" }}</span>
+            <strong id="job-percent">{{ job.progress }} %</strong>
+        </div>
+    </div>
+
+    <dl class="meta-grid">
+        <div>
+            <dt>Identifiant</dt>
+            <dd>{{ job.video_id|default:"—" }}</dd>
+        </div>
+        <div>
+            <dt>Qualité demandée</dt>
+            <dd>{% if job.quality == "best" %}Meilleure disponible{% else %}{{ job.quality }}p maximum{% endif %}</dd>
+        </div>
+        <div>
+            <dt>Langues</dt>
+            <dd>{{ job.languages|default:"fr,en" }}</dd>
+        </div>
+        <div>
+            <dt>Lancé le</dt>
+            <dd>{{ job.created_at|date:"d/m/Y à H:i" }}</dd>
+        </div>
+    </dl>
+
+    {% if job.notes %}
+        <div class="notes" id="job-notes">{{ job.notes }}</div>
+    {% endif %}
+
+    {% if job.error %}
+        <div class="error-box">
+            <strong>Détail de l'erreur</strong>
+            <pre>{{ job.error }}</pre>
+            <p>
+                Astuce : vérifiez que la vidéo est publique et que yt-dlp est à jour.
+                YouTube peut aussi bloquer temporairement certaines adresses IP.
+            </p>
+        </div>
+    {% endif %}
+
+    {% if job.status == "failed" %}
+        <form class="retry-form" method="post" action="{% url 'repost:retry' job.pk %}">
+            {% csrf_token %}
+            <button class="btn btn-retry" type="submit">Réessayer le téléchargement</button>
+        </form>
+    {% endif %}
+</section>
+
+{% if job.is_success and file_groups %}
+    <section class="files">
+        <h2>Fichiers disponibles</h2>
+        {% for group in file_groups %}
+            <div class="card file-group">
+                <h3><span aria-hidden="true">{{ group.icon }}</span> {{ group.label }}</h3>
+                <ul class="file-list">
+                    {% for file in group.files %}
+                        <li>
+                            <span class="file-ext" aria-hidden="true">{{ file.filename|slice:"-4:"|cut:"." }}</span>
+                            <span class="file-main">
+                                <strong>{{ file.name }}</strong>
+                                <small>{{ file.size }}</small>
+                            </span>
+                            <a class="btn-download" href="{{ file.url }}">Télécharger</a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endfor %}
+    </section>
+{% elif not job.is_finished %}
+    <section class="card waiting">
+        <p>Le téléchargement continue en arrière-plan. Cette page se met à jour automatiquement ; vous pouvez la laisser ouverte.</p>
+    </section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if not job.is_finished %}
+<script>
+    (() => {
+        const root = document.getElementById("job");
+        if (!root) return;
+
+        const statusUrl = root.dataset.statusUrl;
+        const bar = document.getElementById("job-progress");
+        const percent = document.getElementById("job-percent");
+        const message = document.getElementById("job-message");
+        const status = document.getElementById("job-status");
+        const title = document.getElementById("job-title");
+
+        async function refresh() {
+            try {
+                const response = await fetch(statusUrl, {
+                    headers: { "Accept": "application/json" },
+                    cache: "no-store",
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+
+                    bar.style.width = `${data.progress}%`;
+                    bar.parentElement.setAttribute("aria-valuenow", data.progress);
+                    bar.classList.toggle("progress-failed", data.status === "failed");
+                    percent.textContent = `${data.progress} %`;
+                    message.textContent = data.message || "En attente de démarrage…";
+                    status.textContent = data.status_label;
+                    status.className = `status status-${data.status}`;
+
+                    if (data.title) {
+                        title.textContent = data.title;
+                    }
+
+                    if (data.is_finished) {
+                        window.location.reload();
+                        return;
+                    }
+                }
+            } catch (error) {
+                // Erreur réseau passagère : on réessaie au prochain passage.
+            }
+
+            window.setTimeout(refresh, 1500);
+        }
+
+        window.setTimeout(refresh, 1000);
+    })();
+</script>
+{% endif %}
+{% endblock %}

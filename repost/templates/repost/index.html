@@ -1,11 +1,101 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nabou Repost</title>
-</head>
-<body>
-    <h1>bienvenue dans Nabou Repost</h1>
-</body>
-</html>
+{% extends "repost/base.html" %}
+
+{% block title %}Nabou Repost — Télécharger une vidéo YouTube{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <span class="eyebrow">Vidéo + sous-titres + transcription</span>
+    <h1>Collez un lien YouTube.<br><span>Récupérez la vidéo et ses textes.</span></h1>
+    <p>
+        Le téléchargement est lancé en arrière-plan : vous pouvez suivre sa progression
+        en direct, puis récupérer la vidéo, les sous-titres et une transcription propre
+        au format <strong>.txt</strong> et <strong>.srt</strong>.
+    </p>
+    <div class="features">
+        <span>Meilleure qualité jusqu'à 1080p</span>
+        <span>Sous-titres manuels et automatiques</span>
+        <span>Plusieurs langues</span>
+        <span>Fichiers prêts à télécharger</span>
+    </div>
+</section>
+
+<div class="layout">
+    <section class="card">
+        <h2>Nouveau téléchargement</h2>
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+                <ul class="field-error">
+                    {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+                </ul>
+            {% endif %}
+
+            <div class="field">
+                <label for="{{ form.url.id_for_label }}">{{ form.url.label }}</label>
+                {{ form.url }}
+                {% for error in form.url.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+            </div>
+
+            <div class="field-grid">
+                <div class="field">
+                    <label for="{{ form.languages.id_for_label }}">{{ form.languages.label }}</label>
+                    {{ form.languages }}
+                    {% for error in form.languages.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+                    <span class="help">{{ form.languages.help_text }}</span>
+                </div>
+                <div class="field">
+                    <label for="{{ form.quality.id_for_label }}">{{ form.quality.label }}</label>
+                    {{ form.quality }}
+                    {% for error in form.quality.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+                    <span class="help">La vidéo est fusionnée en MP4.</span>
+                </div>
+            </div>
+
+            <div class="check-row">
+                <label class="check" for="{{ form.download_subtitles.id_for_label }}">
+                    {{ form.download_subtitles }} {{ form.download_subtitles.label }}
+                </label>
+                <label class="check" for="{{ form.download_transcript.id_for_label }}">
+                    {{ form.download_transcript }} {{ form.download_transcript.label }}
+                </label>
+            </div>
+
+            <button class="btn" type="submit">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 3v12"></path>
+                    <path d="m7 10 5 5 5-5"></path>
+                    <path d="M5 21h14"></path>
+                </svg>
+                Lancer le téléchargement
+            </button>
+            <p class="form-hint">
+                La transcription utilise <code>youtube-transcript-api</code> ; si elle n'est pas
+                disponible, les sous-titres téléchargés par <code>yt-dlp</code> restent accessibles.
+            </p>
+        </form>
+    </section>
+
+    <aside class="card">
+        <h2>Derniers téléchargements</h2>
+        {% if jobs %}
+            <ul class="job-list">
+                {% for job in jobs %}
+                    <li>
+                        <a class="job-row" href="{% url 'repost:detail' job.pk %}">
+                            <span class="job-icon" aria-hidden="true">▶</span>
+                            <span class="job-main">
+                                <strong>{{ job.title|default:"Analyse de la vidéo…" }}</strong>
+                                <small>{{ job.created_at|date:"d/m/Y à H:i" }}</small>
+                            </span>
+                            <span class="status status-{{ job.status }}">{{ job.get_status_display }}</span>
+                        </a>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="empty">Aucun téléchargement pour le moment.</p>
+        {% endif %}
+    </aside>
+</div>
+{% endblock %}

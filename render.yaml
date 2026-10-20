@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: nabou-repost
+    runtime: python
+    plan: free
+    buildCommand: "bash build.sh"
+    startCommand: "PATH=$PWD/bin:$PATH gunicorn nabou_repost.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 180"
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: YTDLP_IMPERSONATE
+        value: "chrome"
+      - key: PYTHONUNBUFFERED
+        value: "1"
