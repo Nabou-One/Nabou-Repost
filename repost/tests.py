@@ -1,3 +1,7 @@
+import shutil
+import tempfile
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 from django.http import Http404
@@ -6,7 +10,13 @@ from django.urls import reverse
 
 from . import views
 from .forms import DownloadForm
-from .models import DownloadJob
+from .models import DownloadJob, NotificationState
+from .services.cookies import (
+    cookie_report,
+    looks_like_cookie_error,
+    maybe_alert_cookie_expiry,
+    parse_cookies,
+)
 from .services.youtube import (
     clean_ansi,
     extract_video_id,
@@ -212,3 +222,76 @@ class DownloadFileTests(TestCase):
         request = RequestFactory().get("/")
         with self.assertRaises(Http404):
             views.download_file(request, self.job.pk, "../../secret.txt")
+
+
+class CookieReportTests(TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp(prefix="nabou-cookies-")
+        self.addCleanup(shutil.rmtree, self.temp_dir, True)
+        self.cookies_path = Path(self.temp_dir) / "cookies.txt"
+
+        now = datetime.now(timezone.utc)
+        soon = int((now + timedelta(days=3)).timestamp())
+        later = int((now + timedelta(days=200)).timestamp())
+        self.cookies_path.write_text(
+            "# Netscape HTTP Cookie File\n"
+            f"#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t{soon}\tSID\tsecret-sid\n"
+            f".youtube.com\tTRUE\t/\tFALSE\t{later}\tPREF\tvalue\n",
+            encoding="utf-8",
+        )
+
+        self.settings_override = override_settings(
+            YTDLP_COOKIES_FILE=str(self.cookies_path),
+            YTDLP_COOKIES_B64="",
+            TELEGRAM_BOT_TOKEN="token",
+            TELEGRAM_CHAT_ID="chat",
+            COOKIE_ALERT_DAYS=7,
+            CRON_TOKEN="secret",
+        )
+        self.settings_override.enable()
+        self.addCleanup(self.settings_override.disable)
+
+    def test_httponly_cookies_are_parsed(self):
+        cookies = parse_cookies(self.cookies_path.read_text(encoding="utf-8"))
+        names = {cookie["name"] for cookie in cookies}
+        self.assertEqual(names, {"SID", "PREF"})
+        sid = next(cookie for cookie in cookies if cookie["name"] == "SID")
+        self.assertIsNotNone(sid["expires_at"])
+
+    def test_report_finds_the_earliest_important_cookie(self):
+        report = cookie_report()
+        self.assertTrue(report["configured"])
+        self.assertEqual(report["earliest_name"], "SID")
+        self.assertGreaterEqual(report["days_left"], 2)
+        self.assertLessEqual(report["days_left"], 3)
+
+    @patch("repost.services.cookies.send_telegram", return_value=True)
+    def test_alert_is_sent_only_once(self, send):
+        first = maybe_alert_cookie_expiry()
+        self.assertTrue(first["alerted"])
+        self.assertTrue(NotificationState.objects.exists())
+        send.assert_called_once()
+
+        second = maybe_alert_cookie_expiry()
+        self.assertFalse(second["alerted"])
+        self.assertEqual(second["reason"], "déjà signalé")
+        send.assert_called_once()
+
+    def test_cookie_error_detection(self):
+        self.assertTrue(looks_like_cookie_error("HTTP Error 403: Forbidden"))
+        self.assertTrue(looks_like_cookie_error("Sign in to confirm you're not a bot"))
+        self.assertFalse(looks_like_cookie_error("Aucun fichier vidéo n'a été produit."))
+
+
+class CookieCronViewTests(TestCase):
+    @override_settings(CRON_TOKEN="secret")
+    @patch("repost.views.maybe_alert_cookie_expiry", return_value={"alerted": False})
+    def test_cron_endpoint_requires_the_right_token(self, alert):
+        response = self.client.get(reverse("repost:check_cookies", args=["wrong"]))
+        self.assertEqual(response.status_code, 403)
+        alert.assert_not_called()
+
+        response = self.client.get(reverse("repost:check_cookies", args=["secret"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["alerted"])
+        alert.assert_called_once_with(force=False)

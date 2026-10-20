@@ -49,3 +49,25 @@ class DownloadJob(models.Model):
     @property
     def is_success(self) -> bool:
         return self.status == self.Status.DONE
+
+
+class NotificationState(models.Model):
+    """Petit journal pour éviter d'envoyer plusieurs fois la même alerte."""
+
+    key = models.CharField(max_length=200, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "état de notification"
+        verbose_name_plural = "états de notification"
+
+    def __str__(self):
+        return self.key
+
+    @classmethod
+    def seen(cls, key: str) -> bool:
+        return cls.objects.filter(key=key).exists()
+
+    @classmethod
+    def mark(cls, key: str) -> None:
+        cls.objects.get_or_create(key=key)

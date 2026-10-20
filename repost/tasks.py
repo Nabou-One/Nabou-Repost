@@ -15,6 +15,8 @@ from django.conf import settings
 from django.db import close_old_connections
 
 from .models import DownloadJob
+from .services.cookies import looks_like_cookie_error
+from .services.notifications import send_telegram
 from .services.youtube import (
     clean_ansi,
     download_video,
@@ -137,6 +139,13 @@ def run_download(job_id: int) -> None:
         )
         logger.info("Travail %s terminé (%s fichiers)", job_id, len(files))
 
+        if getattr(settings, "TELEGRAM_NOTIFY_SUCCESS", False):
+            send_telegram(
+                "✅ Téléchargement terminé\n"
+                f"{job.title or job.url}\n"
+                f"Qualité : {job.quality}p"
+            )
+
     except Exception as exc:  # noqa: BLE001 - on affiche l'erreur à l'utilisateur
         logger.exception("Échec du téléchargement %s", job_id)
         job.status = DownloadJob.Status.FAILED
@@ -147,5 +156,18 @@ def run_download(job_id: int) -> None:
         job.save(
             update_fields=["status", "message", "error", "title", "updated_at"]
         )
+
+        if looks_like_cookie_error(job.error):
+            send_telegram(
+                "❌ Cookies YouTube expirés ou bloqués.\n"
+                f"{job.title or job.url}\n\n"
+                "Réexporte cookies.txt et remplace le Secret File sur Render."
+            )
+        elif getattr(settings, "TELEGRAM_NOTIFY_FAILURES", False):
+            send_telegram(
+                "❌ Échec du téléchargement\n"
+                f"{job.title or job.url}\n"
+                f"{job.error[:300]}"
+            )
     finally:
         close_old_connections()

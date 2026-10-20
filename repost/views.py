@@ -1,6 +1,8 @@
+import logging
 from pathlib import Path
 
 from django.conf import settings
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import connection
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -9,8 +11,11 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .forms import DownloadForm
 from .models import DownloadJob
+from .services.cookies import maybe_alert_cookie_expiry
 from .services.youtube import extract_video_id, group_job_files, list_job_files
 from .tasks import start_download_thread
+
+logger = logging.getLogger(__name__)
 
 
 def _job_context(job):
@@ -27,6 +32,21 @@ def healthz(request):
     except Exception:  # noqa: BLE001 - on renvoie simplement l'état
         return JsonResponse({"status": "error"}, status=503)
     return JsonResponse({"status": "ok"})
+
+
+@require_GET
+def check_cookies(request, token: str):
+    """Endpoint pour un cron externe : vérifie les cookies et alerte Telegram."""
+    if not settings.CRON_TOKEN or token != settings.CRON_TOKEN:
+        return JsonResponse({"error": "unauthorized"}, status=403)
+
+    try:
+        result = maybe_alert_cookie_expiry(force=request.GET.get("force") == "1")
+    except Exception as exc:  # noqa: BLE001 - on renvoie l'erreur au cron
+        logger.exception("Vérification des cookies impossible")
+        return JsonResponse({"error": str(exc)}, status=500)
+
+    return JsonResponse(result, encoder=DjangoJSONEncoder)
 
 
 def index(request):
@@ -49,6 +69,12 @@ def index(request):
             return redirect("repost:detail", pk=job.pk)
     else:
         form = DownloadForm()
+        # Vérification opportuniste : si l'utilisateur ouvre l'application,
+        # on l'avertit aussi sur Telegram quand les cookies arrivent à échéance.
+        try:
+            maybe_alert_cookie_expiry()
+        except Exception:  # noqa: BLE001 - ne doit jamais casser la page
+            logger.exception("Vérification des cookies impossible")
 
     jobs = DownloadJob.objects.all()[:12]
     return render(request, "repost/index.html", {"form": form, "jobs": jobs})

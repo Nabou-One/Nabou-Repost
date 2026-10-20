@@ -147,6 +147,44 @@ contourner le blocage, à ajouter dans **Render → Environment** :
 > Les cookies donnent accès à votre compte YouTube : ne les committez jamais et
 > révoquez-les en cas de doute. Ils expirent régulièrement.
 
+> Il n'existe pas de cookie « permanent ». La durée effective du fichier est
+> celle du cookie critique qui expire le plus tôt. Pour maximiser la durée :
+> utilisez un compte Google dédié, ne vous déconnectez pas, ne changez pas le
+> mot de passe et gardez le compte actif.
+
+### Alerte Telegram avant expiration des cookies
+
+L'application lit la date d'expiration des cookies d'authentification et envoie
+un message Telegram quand le cookie le plus proche expire dans moins de
+`COOKIE_ALERT_DAYS` jours (7 par défaut). Elle alerte aussi immédiatement si un
+téléchargement échoue à cause de cookies expirés.
+
+Variables à ajouter dans **Render → Environment** :
+
+| Variable | Rôle |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | Token du bot Telegram |
+| `TELEGRAM_CHAT_ID` | Identifiant du chat qui reçoit les alertes |
+| `COOKIE_ALERT_DAYS` | Seuil d'alerte en jours (défaut : 7) |
+| `CRON_TOKEN` | Jeton secret protégeant l'endpoint de vérification |
+| `TELEGRAM_NOTIFY_SUCCESS` | `true` pour un message après chaque téléchargement réussi (optionnel) |
+
+Vérification manuelle :
+
+```powershell
+python manage.py check_cookies
+```
+
+Pour une vérification quotidienne gratuite, créez un cron sur
+[cron-job.org](https://cron-job.org) qui appelle chaque jour :
+
+```
+https://nabou-repost.onrender.com/cron/check-cookies/<CRON_TOKEN>/
+```
+
+L'alerte n'est envoyée qu'une fois par date d'expiration. L'ouverture de la
+page d'accueil déclenche aussi la vérification.
+
 Si vous ne disposez ni d'un proxy ni de cookies, le plan gratuit de Render ne
 permettra pas de télécharger depuis YouTube. La solution gratuite la plus
 fiable consiste à lancer l'application sur un ordinateur avec une connexion

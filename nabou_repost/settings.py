@@ -179,6 +179,21 @@ YTDLP_PROXY = os.environ.get("YTDLP_PROXY", "").strip()
 YTDLP_COOKIES_FILE = os.environ.get("YTDLP_COOKIES_FILE", "").strip()
 YTDLP_COOKIES_B64 = os.environ.get("YTDLP_COOKIES_B64", "").strip()
 
+# Notifications Telegram (alerte d'expiration des cookies YouTube).
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+TELEGRAM_NOTIFY_SUCCESS = env_bool("TELEGRAM_NOTIFY_SUCCESS", default=False)
+TELEGRAM_NOTIFY_FAILURES = env_bool("TELEGRAM_NOTIFY_FAILURES", default=False)
+
+# Nombre de jours avant l'expiration du cookie le plus court.
+try:
+    COOKIE_ALERT_DAYS = int(os.environ.get("COOKIE_ALERT_DAYS", "7") or "7")
+except ValueError:
+    COOKIE_ALERT_DAYS = 7
+
+# Jeton secret protégeant l'endpoint /cron/check-cookies/<jeton>/.
+CRON_TOKEN = os.environ.get("CRON_TOKEN", "").strip()
+
 # Derrière le proxy HTTPS de Render.
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
