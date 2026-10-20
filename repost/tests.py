@@ -299,6 +299,23 @@ class CookieCronViewTests(TestCase):
         alert.assert_called_once_with(force=False)
 
 
+class FfmpegHealthViewTests(TestCase):
+    @override_settings(CRON_TOKEN="secret")
+    @patch(
+        "repost.views.ffmpeg_report",
+        return_value={"ok": True, "version": "ffmpeg version 7.0"},
+    )
+    def test_requires_the_right_token_and_returns_the_report(self, report):
+        response = self.client.get(reverse("repost:ffmpeg_health", args=["wrong"]))
+        self.assertEqual(response.status_code, 403)
+        report.assert_not_called()
+
+        response = self.client.get(reverse("repost:ffmpeg_health", args=["secret"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+        report.assert_called_once()
+
+
 class PrepareCookiesCommandTests(TestCase):
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp(prefix="nabou-prepare-")

@@ -13,6 +13,7 @@ import base64
 import logging
 import re
 import shutil
+import subprocess
 import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -208,6 +209,57 @@ def _ffmpeg_location() -> str | None:
         return imageio_ffmpeg.get_ffmpeg_exe()
     except Exception:  # noqa: BLE001 - paquet absent ou binaire introuvable
         return None
+
+
+def ffmpeg_report() -> dict:
+    """Diagnostic : ffmpeg est-il disponible et exécutable ?
+
+    Utilisé par l'endpoint protégé ``/diagnostic/ffmpeg/<jeton>/`` pour
+    vérifier le binaire embarqué par ``imageio-ffmpeg`` sur Render.
+    """
+    errors: list[str] = []
+    system_path = shutil.which("ffmpeg")
+    imageio_path = None
+
+    try:
+        import imageio_ffmpeg
+
+        imageio_path = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception as exc:  # noqa: BLE001 - paquet absent ou binaire introuvable
+        errors.append(f"imageio-ffmpeg : {exc}")
+
+    path = system_path or imageio_path
+    exists = bool(path and Path(path).is_file())
+    version = None
+
+    if path:
+        try:
+            completed = subprocess.run(
+                [path, "-version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            output = (completed.stdout or completed.stderr or "").strip()
+            if output:
+                version = output.splitlines()[0]
+            if completed.returncode != 0:
+                errors.append(
+                    f"ffmpeg -version a retourné le code {completed.returncode}"
+                )
+        except Exception as exc:  # noqa: BLE001 - binaire cassé ou non exécutable
+            errors.append(f"exécution de ffmpeg : {exc}")
+
+    return {
+        "ok": bool(exists and version),
+        "exists": exists,
+        "system_ffmpeg": system_path,
+        "imageio_ffmpeg": imageio_path,
+        "path": path,
+        "version": version,
+        "errors": errors,
+    }
 
 
 def _srt_filename(directory: Path, language_code: str) -> Path:

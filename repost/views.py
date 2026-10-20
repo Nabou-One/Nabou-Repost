@@ -12,7 +12,12 @@ from django.views.decorators.http import require_GET, require_POST
 from .forms import DownloadForm
 from .models import DownloadJob
 from .services.cookies import maybe_alert_cookie_expiry
-from .services.youtube import extract_video_id, group_job_files, list_job_files
+from .services.youtube import (
+    extract_video_id,
+    ffmpeg_report,
+    group_job_files,
+    list_job_files,
+)
 from .tasks import start_download_thread
 
 logger = logging.getLogger(__name__)
@@ -47,6 +52,21 @@ def check_cookies(request, token: str):
         return JsonResponse({"error": str(exc)}, status=500)
 
     return JsonResponse(result, encoder=DjangoJSONEncoder)
+
+
+@require_GET
+def ffmpeg_health(request, token: str):
+    """Diagnostic protégé : vérifie que ffmpeg est présent et exécutable."""
+    if not settings.CRON_TOKEN or token != settings.CRON_TOKEN:
+        return JsonResponse({"error": "unauthorized"}, status=403)
+
+    try:
+        report = ffmpeg_report()
+    except Exception as exc:  # noqa: BLE001 - on renvoie l'erreur au diagnostic
+        logger.exception("Diagnostic ffmpeg impossible")
+        return JsonResponse({"ok": False, "error": str(exc)}, status=500)
+
+    return JsonResponse(report)
 
 
 def index(request):
