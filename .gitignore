@@ -8,3 +8,5 @@ staticfiles/
 .venv/
 .env
 bin/
+cookies.txt
+*.cookies.txt
