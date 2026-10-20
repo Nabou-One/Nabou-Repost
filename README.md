@@ -112,6 +112,41 @@ Pour conserver les fichiers et éviter l'endormissement, il faut un disque
 persistant (offre payante) ou un stockage externe S3/Cloudflare R2, et un plan
 Always On. Pour de simples tests, utilisez la qualité **144p** ou **240p**.
 
+### Contourner le blocage YouTube sur Render
+
+Les IP de datacenter de Render sont souvent refusées par YouTube
+(`HTTP Error 403: Forbidden`). Deux variables d'environnement permettent de
+contourner le blocage, à ajouter dans **Render → Environment** :
+
+| Variable | Rôle |
+| --- | --- |
+| `YTDLP_PROXY` | Proxy HTTP/SOCKS5, ex. `socks5://user:pass@host:1080` |
+| `YTDLP_COOKIES_B64` | Contenu d'un `cookies.txt` encodé en base64 |
+
+Pour les cookies YouTube :
+
+1. exportez `youtube.com` au format Netscape avec une extension comme
+   *Get cookies.txt LOCALLY* ;
+2. encodez le fichier en base64 :
+
+   ```powershell
+   [Convert]::ToBase64String([IO.File]::ReadAllBytes("cookies.txt")) | Set-Clipboard
+   ```
+
+3. collez la valeur dans `YTDLP_COOKIES_B64` sur Render, puis redéployez.
+
+> Les cookies donnent accès à votre compte YouTube : ne les committez jamais et
+> révoquez-les en cas de doute. Ils expirent régulièrement.
+
+Si vous ne disposez ni d'un proxy ni de cookies, le plan gratuit de Render ne
+permettra pas de télécharger depuis YouTube. La solution gratuite la plus
+fiable consiste à lancer l'application sur un ordinateur avec une connexion
+résidentielle et à l'exposer avec **Cloudflare Tunnel** :
+
+```powershell
+cloudflared tunnel --url http://127.0.0.1:8000
+```
+
 ## Remarques
 
 - Le téléchargement se fait dans un thread : le serveur de développement Django

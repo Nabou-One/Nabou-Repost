@@ -9,6 +9,7 @@ Ce module encapsule deux bibliothèques :
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 import shutil
@@ -284,6 +285,17 @@ def download_video(job, directory: Path, progress_callback=None) -> tuple[dict, 
     directory.mkdir(parents=True, exist_ok=True)
     temp_directory = directory / ".tmp"
 
+    cookies_file = None
+    cookies_b64 = getattr(settings, "YTDLP_COOKIES_B64", "")
+    if cookies_b64:
+        try:
+            temp_directory.mkdir(parents=True, exist_ok=True)
+            cookies_file = temp_directory / "cookies.txt"
+            cookies_file.write_bytes(base64.b64decode(cookies_b64))
+        except Exception:  # noqa: BLE001 - cookie invalide : on continue sans
+            logger.warning("YTDLP_COOKIES_B64 invalide : cookies ignorés.")
+            cookies_file = None
+
     last_update = {"at": 0.0, "percent": 0}
     progress_state = {"format_id": None, "phase": 0}
 
@@ -385,6 +397,13 @@ def download_video(job, directory: Path, progress_callback=None) -> tuple[dict, 
         except ValueError:
             logger.warning("Cible d'imitation yt-dlp invalide : %s", impersonate)
 
+    proxy = getattr(settings, "YTDLP_PROXY", "")
+    if proxy:
+        options["proxy"] = proxy
+
+    if cookies_file:
+        options["cookiefile"] = str(cookies_file)
+
     # Pour les qualités basses, on privilégie la résolution la plus proche
     # du maximum demandé, même si yt-dlp doit utiliser son format de secours.
     if job.quality != "best":
@@ -404,10 +423,12 @@ def download_video(job, directory: Path, progress_callback=None) -> tuple[dict, 
         )
 
     logger.info("Téléchargement de %s dans %s", job.url, directory)
-    with yt_dlp.YoutubeDL(options) as ydl:
-        info = ydl.extract_info(job.url, download=True) or {}
-
-    shutil.rmtree(temp_directory, ignore_errors=True)
+    try:
+        with yt_dlp.YoutubeDL(options) as ydl:
+            info = ydl.extract_info(job.url, download=True) or {}
+    finally:
+        # Supprime aussi le fichier de cookies temporaire.
+        shutil.rmtree(temp_directory, ignore_errors=True)
 
     # Avec ignoreerrors, yt-dlp peut avoir échoué sans lever d'exception.
     # On vérifie donc qu'une vidéo a bien été produite.
