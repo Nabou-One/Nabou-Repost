@@ -1,0 +1,109 @@
+{% extends "repost/base.html" %}
+
+{% block title %}{{ info.title|default:"Choisir un format" }} — Yoinku{% endblock %}
+
+{% block content %}
+<a class="back" href="{% url 'repost:yoinku_index' %}">
+    <span aria-hidden="true">←</span> Changer de lien
+</a>
+
+<section class="card">
+    <div class="video-summary">
+        {% if info.thumbnailUrl %}
+            <img src="{{ info.thumbnailUrl }}" alt="Miniature de {{ info.title }}" loading="lazy">
+        {% endif %}
+        <div>
+            <span class="eyebrow">Vidéo trouvée</span>
+            <h2>{{ info.title|default:"Vidéo sans titre" }}</h2>
+            <p>
+                {{ info.author|default:"Auteur inconnu" }}
+                {% if formatted_duration %} · {{ formatted_duration }}{% endif %}
+            </p>
+            <div class="video-meta">
+                <span>{{ info.platform|default:"youtube" }}</span>
+                <span>{{ formats|length }} format{{ formats|length|pluralize }} vidéo</span>
+                {% if info.id %}<span>{{ info.id }}</span>{% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="card" style="margin-top: 20px;">
+    <h2>Choisissez la qualité et les sous-titres</h2>
+
+    <form method="post" action="{% url 'repost:yoinku_start' %}" novalidate>
+        {% csrf_token %}
+        {{ download_form.url }}
+
+        {% if download_form.non_field_errors %}
+            <ul class="field-error">
+                {% for error in download_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+        {% endif %}
+
+        <div class="format-grid">
+            {% for format in formats %}
+                <label class="format-card">
+                    <input
+                        type="radio"
+                        name="format_id"
+                        value="{{ format.id }}"
+                        {% if format.id == selected_format_id %}checked{% endif %}
+                        required
+                    >
+                    <strong>{{ format.quality }}</strong>
+                    <small>{{ format.container|upper }}{% if format.fps %} · {{ format.fps }} fps{% endif %}</small>
+                    <span class="format-size">
+                        {% if format.size %}
+                            {{ format.size }}{% if format.estimated %} (estimé){% endif %}
+                        {% else %}
+                            Taille inconnue
+                        {% endif %}
+                    </span>
+                </label>
+            {% endfor %}
+        </div>
+        {% for error in download_form.format_id.errors %}
+            <p class="field-error">{{ error }}</p>
+        {% endfor %}
+
+        <div class="field" style="margin-top: 18px;">
+            <label for="{{ download_form.lang.id_for_label }}">{{ download_form.lang.label }}</label>
+            {{ download_form.lang }}
+            {% for error in download_form.lang.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+            <span class="help">{{ download_form.lang.help_text }}</span>
+        </div>
+
+        <datalist id="yoinku-language-options">
+            <option value="fr">Français</option>
+            <option value="en">Anglais</option>
+            <option value="es">Espagnol</option>
+            <option value="de">Allemand</option>
+            <option value="it">Italien</option>
+            <option value="pt">Portugais</option>
+            <option value="pt-BR">Portugais (Brésil)</option>
+            <option value="ja">Japonais</option>
+            <option value="ko">Coréen</option>
+            <option value="zh-Hans">Chinois simplifié</option>
+            <option value="zh-Hant">Chinois traditionnel</option>
+            <option value="ar">Arabe</option>
+            <option value="ru">Russe</option>
+            <option value="hi">Hindi</option>
+        </datalist>
+
+        <button class="btn" type="submit">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3v12"></path>
+                <path d="m7 10 5 5 5-5"></path>
+                <path d="M5 21h14"></path>
+            </svg>
+            Télécharger la vidéo et les sous-titres
+        </button>
+        <p class="form-hint">
+            Yoinku prépare un lien vidéo signé, valable environ 1 heure. Les sous-titres
+            sont enregistrés sur ce serveur et restent téléchargeables depuis la page de suivi.
+            Le téléchargement consomme 1 des 5 crédits quotidiens du compte Yoinku.
+        </p>
+    </form>
+</section>
+{% endblock %}

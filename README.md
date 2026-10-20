@@ -12,6 +12,8 @@ transcription depuis une simple page web.
   pratiques pour les tests rapides et les petits fichiers ;
 - sous-titres manuels **et** automatiques, dans les langues demandées ;
 - transcription via `youtube-transcript-api` aux formats `.txt` et `.srt` ;
+- téléchargement alternatif via l'API **Yoinku**, sans cookies à fournir, avec
+  choix de la qualité et des sous-titres ;
 - fichiers servis en pièce jointe depuis la page de suivi ;
 - historique des derniers téléchargements.
 
@@ -60,15 +62,51 @@ Ouvrez ensuite <http://127.0.0.1:8000/>.
 Les fichiers sont stockés dans `media/downloads/<id>/`. Chaque vidéo possède son
 propre dossier, ce qui évite les collisions de noms.
 
+## Téléchargement via l'API Yoinku
+
+La page <http://127.0.0.1:8000/yoinku/> (et le bouton **Ouvrir la page Yoinku**
+sur l'accueil) propose une seconde méthode, sans cookies YouTube :
+
+1. collez un lien YouTube ;
+2. Yoinku renvoie les formats disponibles ;
+3. choisissez la qualité et, si besoin, un code de langue pour les sous-titres ;
+4. le serveur demande le fichier à Yoinku et récupère la transcription ;
+5. la page de suivi propose le lien vidéo (valable environ 1 heure) et les
+   fichiers `.srt` / `.txt` conservés dans `media/yoinku/<id>/`.
+
+Créez une clé sur <https://yoinku.com/en/account>, puis ajoutez-la dans
+**Render → Environment** :
+
+| Variable | Rôle |
+| --- | --- |
+| `YOINKU_API_KEY` | Clé `yk_…` de votre compte Yoinku (obligatoire) |
+| `YOINKU_BASE_URL` | URL de base, par défaut `https://yoinku.com/api/v1` |
+| `YOINKU_INFO_TIMEOUT` | Délai de la requête `info` en secondes (30) |
+| `YOINKU_TRANSCRIPT_TIMEOUT` | Délai de la requête `transcript` en secondes (60) |
+| `YOINKU_DOWNLOAD_TIMEOUT` | Délai de la requête `download` en secondes (120) |
+
+> La clé reste côté serveur : elle n'est jamais incluse dans le HTML ni envoyée
+> au navigateur. La page est toutefois publique ; le compte gratuit Yoinku est
+> limité à **5 téléchargements et 10 requêtes de sous-titres par jour**. Si le
+> site est partagé, protégez la page (authentification, code d'accès ou limite
+> par IP) pour ne pas épuiser le quota.
+
+> Le lien vidéo renvoyé par Yoinku expire après environ une heure. Passé ce
+> délai, relancez le téléchargement pour obtenir un nouveau lien. Les
+> sous-titres restent disponibles tant que le disque éphémère de Render n'a pas
+> été réinitialisé.
+
 ## Structure de l'intégration
 
 | Fichier | Rôle |
 | --- | --- |
 | `repost/services/youtube.py` | Validation des URL, téléchargement `yt-dlp`, transcription `youtube-transcript-api`, listage des fichiers |
-| `repost/tasks.py` | Exécution du téléchargement dans un thread et mise à jour de l'état |
-| `repost/models.py` | Modèle `DownloadJob` (statut, progression, fichiers) |
-| `repost/forms.py` | Formulaire et validation |
-| `repost/views.py` | Page d'accueil, suivi JSON, téléchargement des fichiers |
+| `repost/services/yoinku.py` | Client de l'API Yoinku (`info`, `download`, `transcript`) et génération SRT/TXT |
+| `repost/tasks.py` | Exécution du téléchargement `yt-dlp` dans un thread et mise à jour de l'état |
+| `repost/yoinku_tasks.py` | Exécution d'un téléchargement Yoinku dans un thread |
+| `repost/models.py` | Modèles `DownloadJob` et `YoinkuJob` |
+| `repost/forms.py` | Formulaires et validation |
+| `repost/views.py` | Page d'accueil, pages Yoinku, suivi JSON, téléchargement des fichiers |
 | `repost/templates/repost/` | Interface web |
 
 ## Déploiement sur Render (plan gratuit)
@@ -83,7 +121,9 @@ télécharge Deno, collecte les fichiers statiques et applique les migrations.
    (`https://nabou-repost.onrender.com`).
 
 Render génère automatiquement `SECRET_KEY`. Les variables `DEBUG=False` et
-`YTDLP_IMPERSONATE=chrome` sont définies dans `render.yaml`.
+`YTDLP_IMPERSONATE=chrome` sont définies dans `render.yaml`. La variable
+`YOINKU_API_KEY` est déclarée avec `sync: false` : ajoutez sa valeur dans
+**Render → Environment** après le premier déploiement.
 
 ### Configuration manuelle (sans Blueprint)
 
@@ -93,7 +133,7 @@ Render génère automatiquement `SECRET_KEY`. Les variables `DEBUG=False` et
 | Build Command | `bash build.sh` |
 | Start Command | `PATH=$PWD/bin:$PATH gunicorn nabou_repost.wsgi:application --bind 0.0.0.0:$PORT --worker-class gthread --workers 1 --threads 4 --timeout 180` |
 | Health Check Path | `/healthz` |
-| Variables | `SECRET_KEY` (générée), `DEBUG=False`, `YTDLP_IMPERSONATE=chrome` |
+| Variables | `SECRET_KEY` (générée), `DEBUG=False`, `YTDLP_IMPERSONATE=chrome`, `YOINKU_API_KEY` |
 
 ### Limites du plan gratuit
 

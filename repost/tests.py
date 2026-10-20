@@ -11,8 +11,8 @@ from django.test import RequestFactory, SimpleTestCase, TestCase, override_setti
 from django.urls import reverse
 
 from . import views
-from .forms import DownloadForm
-from .models import DownloadJob, NotificationState
+from .forms import DownloadForm, YoinkuDownloadForm
+from .models import DownloadJob, NotificationState, YoinkuJob
 from .services.cookies import (
     cookie_report,
     looks_like_cookie_error,
@@ -26,6 +26,15 @@ from .services.youtube import (
     group_job_files,
     normalize_youtube_url,
     parse_languages,
+)
+from .services.yoinku import (
+    YoinkuError,
+    build_srt,
+    build_txt,
+    find_video_format,
+    human_size,
+    request_download,
+    video_formats,
 )
 
 
@@ -314,6 +323,292 @@ class FfmpegHealthViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["ok"])
         report.assert_called_once()
+
+
+YOINKU_INFO = {
+    "id": "YE7VzlLtp-4",
+    "platform": "youtube",
+    "title": "Big Buck Bunny",
+    "author": "Blender",
+    "durationSeconds": 597,
+    "thumbnailUrl": "https://i.ytimg.com/vi/YE7VzlLtp-4/maxresdefault.jpg",
+    "formats": [
+        {
+            "id": "v-1080",
+            "kind": "video",
+            "container": "mp4",
+            "quality": "1080p",
+            "height": 1080,
+            "fps": 24,
+            "hasVideo": True,
+            "hasAudio": True,
+            "filesizeBytes": 106521079,
+            "estimated": True,
+        },
+        {
+            "id": "v-144",
+            "kind": "video",
+            "container": "mp4",
+            "quality": "144p",
+            "height": 144,
+            "fps": 24,
+            "hasVideo": True,
+            "hasAudio": True,
+            "filesizeBytes": 22394892,
+            "estimated": True,
+        },
+        {
+            "id": "a-mp3",
+            "kind": "audio",
+            "container": "mp3",
+            "quality": "MP3",
+            "hasVideo": False,
+            "hasAudio": True,
+            "filesizeBytes": 9802222,
+        },
+    ],
+}
+
+
+class YoinkuServiceTests(SimpleTestCase):
+    def test_video_formats_filters_audio_and_sorts_by_height(self):
+        formats = video_formats(YOINKU_INFO)
+        self.assertEqual([item["id"] for item in formats], ["v-1080", "v-144"])
+        self.assertEqual(formats[1]["size"], "21.4 Mo")
+
+    def test_find_video_format(self):
+        item = find_video_format(YOINKU_INFO, "v-144")
+        self.assertIsNotNone(item)
+        self.assertEqual(item["quality"], "144p")
+        self.assertIsNone(find_video_format(YOINKU_INFO, "v-999"))
+
+    def test_build_srt(self):
+        chunks = [
+            {"startSeconds": 1.36, "durationSeconds": 1.68, "text": "Bonjour"},
+            {"startSeconds": 65.5, "durationSeconds": 2, "text": "Monde"},
+            {"startSeconds": 70, "durationSeconds": 1, "text": "   "},
+        ]
+        self.assertEqual(
+            build_srt(chunks),
+            "1\n"
+            "00:00:01,360 --> 00:00:03,040\n"
+            "Bonjour\n\n"
+            "2\n"
+            "00:01:05,500 --> 00:01:07,500\n"
+            "Monde\n",
+        )
+
+    def test_build_txt_falls_back_to_chunks(self):
+        self.assertEqual(
+            build_txt(
+                {
+                    "text": "",
+                    "chunks": [
+                        {"text": "Bonjour"},
+                        {"text": "le monde"},
+                    ],
+                }
+            ),
+            "Bonjour\nle monde\n",
+        )
+
+    def test_human_size(self):
+        self.assertEqual(human_size(22394892), "21.4 Mo")
+        self.assertEqual(human_size(None), "")
+
+    @override_settings(YOINKU_API_KEY="")
+    def test_missing_api_key_is_reported_before_any_network_call(self):
+        with self.assertRaises(YoinkuError) as caught:
+            request_download("https://youtu.be/YE7VzlLtp-4", "v-144")
+        self.assertEqual(caught.exception.code, "missing_api_key")
+
+
+class YoinkuViewTests(TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp(prefix="nabou-yoinku-")
+        self.addCleanup(shutil.rmtree, self.temp_dir, True)
+        self.settings_override = override_settings(
+            MEDIA_ROOT=Path(self.temp_dir),
+            YOINKU_API_KEY="test-key",
+        )
+        self.settings_override.enable()
+        self.addCleanup(self.settings_override.disable)
+
+    def test_index_get(self):
+        response = self.client.get(reverse("repost:yoinku_index"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Nouveau téléchargement Yoinku")
+
+    def test_index_post_renders_formats(self):
+        with patch("repost.views.fetch_info", return_value=YOINKU_INFO) as info:
+            response = self.client.post(
+                reverse("repost:yoinku_index"),
+                {"url": "https://youtu.be/YE7VzlLtp-4"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Big Buck Bunny")
+        self.assertContains(response, "v-144")
+        info.assert_called_once()
+
+    def test_index_rejects_non_youtube_url_without_calling_api(self):
+        with patch("repost.views.fetch_info") as info:
+            response = self.client.post(
+                reverse("repost:yoinku_index"),
+                {"url": "https://example.com/watch?v=YE7VzlLtp-4"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Lien YouTube invalide")
+        info.assert_not_called()
+
+    def test_index_displays_api_error(self):
+        with patch(
+            "repost.views.fetch_info",
+            side_effect=YoinkuError("Quota Yoinku atteint.", status=429),
+        ):
+            response = self.client.post(
+                reverse("repost:yoinku_index"),
+                {"url": "https://youtu.be/YE7VzlLtp-4"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Quota Yoinku atteint")
+
+    def test_start_creates_job_and_starts_thread(self):
+        with patch("repost.views.fetch_info", return_value=YOINKU_INFO), patch(
+            "repost.views.start_yoinku_thread"
+        ) as start:
+            response = self.client.post(
+                reverse("repost:yoinku_start"),
+                {
+                    "url": "https://youtu.be/YE7VzlLtp-4",
+                    "format_id": "v-144",
+                    "lang": "fr",
+                },
+            )
+
+        job = YoinkuJob.objects.get()
+        self.assertRedirects(
+            response,
+            reverse("repost:yoinku_detail", args=[job.pk]),
+        )
+        self.assertEqual(job.title, "Big Buck Bunny")
+        self.assertEqual(job.format_id, "v-144")
+        self.assertEqual(job.format_label, "144p · MP4 · 24 fps · 21.4 Mo")
+        self.assertEqual(job.subtitle_lang, "fr")
+        self.assertEqual(job.directory, f"yoinku/{job.pk}")
+        start.assert_called_once_with(job.pk)
+
+    def test_start_rejects_unknown_format(self):
+        with patch("repost.views.fetch_info", return_value=YOINKU_INFO), patch(
+            "repost.views.start_yoinku_thread"
+        ) as start:
+            response = self.client.post(
+                reverse("repost:yoinku_start"),
+                {
+                    "url": "https://youtu.be/YE7VzlLtp-4",
+                    "format_id": "v-999",
+                    "lang": "",
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(YoinkuJob.objects.count(), 0)
+        self.assertContains(response, "plus disponible", status_code=400)
+        start.assert_not_called()
+
+    def test_download_form_rejects_invalid_language(self):
+        form = YoinkuDownloadForm(
+            {
+                "url": "https://youtu.be/YE7VzlLtp-4",
+                "format_id": "v-144",
+                "lang": "français",
+            }
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("lang", form.errors)
+
+    def test_status_returns_json(self):
+        job = YoinkuJob.objects.create(
+            url="https://youtu.be/YE7VzlLtp-4",
+            format_id="v-144",
+            status=YoinkuJob.Status.DONE,
+            title="Big Buck Bunny",
+            video_url="https://example.com/video.mp4",
+        )
+        response = self.client.get(reverse("repost:yoinku_status", args=[job.pk]))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["is_success"])
+        self.assertEqual(data["video_filename"], "")
+
+    def test_file_is_served_from_job_directory(self):
+        job = YoinkuJob.objects.create(
+            url="https://youtu.be/YE7VzlLtp-4",
+            format_id="v-144",
+            status=YoinkuJob.Status.DONE,
+            directory="yoinku/42",
+            subtitle_filename="big-buck-bunny.en.srt",
+        )
+        directory = Path(self.temp_dir) / "yoinku/42"
+        directory.mkdir(parents=True)
+        (directory / job.subtitle_filename).write_bytes(
+            b"1\n00:00:00,000 --> 00:00:01,000\nBonjour\n"
+        )
+
+        response = self.client.get(
+            reverse(
+                "repost:yoinku_file",
+                args=[job.pk, job.subtitle_filename],
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment", response["Content-Disposition"])
+        self.assertEqual(
+            b"".join(response.streaming_content).decode("utf-8"),
+            "1\n00:00:00,000 --> 00:00:01,000\nBonjour\n",
+        )
+
+    def test_file_rejects_path_traversal(self):
+        job = YoinkuJob.objects.create(
+            url="https://youtu.be/YE7VzlLtp-4",
+            format_id="v-144",
+            status=YoinkuJob.Status.DONE,
+            directory="yoinku/42",
+        )
+        (Path(self.temp_dir) / "yoinku").mkdir(parents=True)
+        (Path(self.temp_dir) / "yoinku/secret.txt").write_text(
+            "secret",
+            encoding="utf-8",
+        )
+        request = RequestFactory().get("/")
+        with self.assertRaises(Http404):
+            views.yoinku_file(request, job.pk, "../secret.txt")
+
+    def test_retry_creates_a_new_job(self):
+        previous = YoinkuJob.objects.create(
+            url="https://youtu.be/YE7VzlLtp-4",
+            video_id="YE7VzlLtp-4",
+            title="Big Buck Bunny",
+            format_id="v-144",
+            subtitle_lang="fr",
+            status=YoinkuJob.Status.FAILED,
+        )
+        with patch("repost.views.start_yoinku_thread") as start:
+            response = self.client.post(
+                reverse("repost:yoinku_retry", args=[previous.pk])
+            )
+
+        new_job = YoinkuJob.objects.exclude(pk=previous.pk).get()
+        self.assertRedirects(
+            response,
+            reverse("repost:yoinku_detail", args=[new_job.pk]),
+        )
+        self.assertEqual(new_job.url, previous.url)
+        self.assertEqual(new_job.format_id, "v-144")
+        self.assertEqual(new_job.subtitle_lang, "fr")
+        start.assert_called_once_with(new_job.pk)
 
 
 class PrepareCookiesCommandTests(TestCase):

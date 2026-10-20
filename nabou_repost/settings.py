@@ -179,6 +179,29 @@ YTDLP_PROXY = os.environ.get("YTDLP_PROXY", "").strip()
 YTDLP_COOKIES_FILE = os.environ.get("YTDLP_COOKIES_FILE", "").strip()
 YTDLP_COOKIES_B64 = os.environ.get("YTDLP_COOKIES_B64", "").strip()
 
+# API Yoinku : téléchargement vidéo + sous-titres sans cookies.
+# La clé reste côté serveur, jamais dans le HTML.
+YOINKU_API_KEY = os.environ.get("YOINKU_API_KEY", "").strip()
+YOINKU_BASE_URL = os.environ.get(
+    "YOINKU_BASE_URL", "https://yoinku.com/api/v1"
+).rstrip("/")
+try:
+    YOINKU_INFO_TIMEOUT = int(os.environ.get("YOINKU_INFO_TIMEOUT", "30") or "30")
+except ValueError:
+    YOINKU_INFO_TIMEOUT = 30
+try:
+    YOINKU_TRANSCRIPT_TIMEOUT = int(
+        os.environ.get("YOINKU_TRANSCRIPT_TIMEOUT", "60") or "60"
+    )
+except ValueError:
+    YOINKU_TRANSCRIPT_TIMEOUT = 60
+try:
+    YOINKU_DOWNLOAD_TIMEOUT = int(
+        os.environ.get("YOINKU_DOWNLOAD_TIMEOUT", "120") or "120"
+    )
+except ValueError:
+    YOINKU_DOWNLOAD_TIMEOUT = 120
+
 # Notifications Telegram (alerte d'expiration des cookies YouTube).
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()

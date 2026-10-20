@@ -14,5 +14,7 @@ services:
         value: "False"
       - key: YTDLP_IMPERSONATE
         value: "chrome"
+      - key: YOINKU_API_KEY
+        sync: false
       - key: PYTHONUNBUFFERED
         value: "1"
