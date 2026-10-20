@@ -286,15 +286,24 @@ def download_video(job, directory: Path, progress_callback=None) -> tuple[dict, 
     temp_directory = directory / ".tmp"
 
     cookies_file = None
-    cookies_b64 = getattr(settings, "YTDLP_COOKIES_B64", "")
-    if cookies_b64:
-        try:
-            temp_directory.mkdir(parents=True, exist_ok=True)
-            cookies_file = temp_directory / "cookies.txt"
-            cookies_file.write_bytes(base64.b64decode(cookies_b64))
-        except Exception:  # noqa: BLE001 - cookie invalide : on continue sans
-            logger.warning("YTDLP_COOKIES_B64 invalide : cookies ignorés.")
-            cookies_file = None
+    cookies_path = getattr(settings, "YTDLP_COOKIES_FILE", "")
+    if cookies_path:
+        candidate = Path(cookies_path)
+        if candidate.is_file():
+            cookies_file = candidate
+        else:
+            logger.warning("YTDLP_COOKIES_FILE introuvable : %s", cookies_path)
+
+    if cookies_file is None:
+        cookies_b64 = getattr(settings, "YTDLP_COOKIES_B64", "")
+        if cookies_b64:
+            try:
+                temp_directory.mkdir(parents=True, exist_ok=True)
+                cookies_file = temp_directory / "cookies.txt"
+                cookies_file.write_bytes(base64.b64decode(cookies_b64))
+            except Exception:  # noqa: BLE001 - cookie invalide : on continue sans
+                logger.warning("YTDLP_COOKIES_B64 invalide : cookies ignorés.")
+                cookies_file = None
 
     last_update = {"at": 0.0, "percent": 0}
     progress_state = {"format_id": None, "phase": 0}

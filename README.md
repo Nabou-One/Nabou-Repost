@@ -115,25 +115,34 @@ Always On. Pour de simples tests, utilisez la qualité **144p** ou **240p**.
 ### Contourner le blocage YouTube sur Render
 
 Les IP de datacenter de Render sont souvent refusées par YouTube
-(`HTTP Error 403: Forbidden`). Deux variables d'environnement permettent de
+(`HTTP Error 403: Forbidden`). Trois variables d'environnement permettent de
 contourner le blocage, à ajouter dans **Render → Environment** :
 
 | Variable | Rôle |
 | --- | --- |
 | `YTDLP_PROXY` | Proxy HTTP/SOCKS5, ex. `socks5://user:pass@host:1080` |
+| `YTDLP_COOKIES_FILE` | Chemin d'un `cookies.txt` monté (recommandé) |
 | `YTDLP_COOKIES_B64` | Contenu d'un `cookies.txt` encodé en base64 |
 
-Pour les cookies YouTube :
+#### Méthode recommandée : Secret File
 
 1. exportez `youtube.com` au format Netscape avec une extension comme
    *Get cookies.txt LOCALLY* ;
-2. encodez le fichier en base64 :
+2. dans **Render → Environment → Secret Files**, cliquez sur **Add file**,
+   nommez-le `cookies.txt` et collez le contenu du fichier ;
+3. ajoutez la variable `YTDLP_COOKIES_FILE` avec la valeur
+   `/etc/secrets/cookies.txt` ;
+4. cliquez sur **Save, rebuild, and deploy**.
+
+#### Méthode alternative : base64
+
+1. encodez le fichier :
 
    ```powershell
    [Convert]::ToBase64String([IO.File]::ReadAllBytes("cookies.txt")) | Set-Clipboard
    ```
 
-3. collez la valeur dans `YTDLP_COOKIES_B64` sur Render, puis redéployez.
+2. collez la valeur dans `YTDLP_COOKIES_B64`, puis redéployez.
 
 > Les cookies donnent accès à votre compte YouTube : ne les committez jamais et
 > révoquez-les en cas de doute. Ils expirent régulièrement.

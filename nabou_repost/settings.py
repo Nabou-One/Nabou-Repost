@@ -173,8 +173,10 @@ YTDLP_IMPERSONATE = os.environ.get("YTDLP_IMPERSONATE", "").strip()
 
 # Contournements réseau pour les hébergeurs dont l'IP est bloquée par YouTube.
 # - YTDLP_PROXY : proxy HTTP/SOCKS5, ex. socks5://user:pass@host:1080
+# - YTDLP_COOKIES_FILE : chemin d'un cookies.txt (Render Secret File)
 # - YTDLP_COOKIES_B64 : contenu d'un cookies.txt encodé en base64
 YTDLP_PROXY = os.environ.get("YTDLP_PROXY", "").strip()
+YTDLP_COOKIES_FILE = os.environ.get("YTDLP_COOKIES_FILE", "").strip()
 YTDLP_COOKIES_B64 = os.environ.get("YTDLP_COOKIES_B64", "").strip()
 
 # Derrière le proxy HTTPS de Render.
