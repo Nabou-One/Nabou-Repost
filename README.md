@@ -91,7 +91,7 @@ Render génère automatiquement `SECRET_KEY`. Les variables `DEBUG=False` et
 | --- | --- |
 | Runtime | Python |
 | Build Command | `bash build.sh` |
-| Start Command | `PATH=$PWD/bin:$PATH gunicorn nabou_repost.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 180` |
+| Start Command | `PATH=$PWD/bin:$PATH gunicorn nabou_repost.wsgi:application --bind 0.0.0.0:$PORT --worker-class gthread --workers 1 --threads 4 --timeout 180` |
 | Health Check Path | `/healthz` |
 | Variables | `SECRET_KEY` (générée), `DEBUG=False`, `YTDLP_IMPERSONATE=chrome` |
 
