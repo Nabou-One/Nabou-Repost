@@ -10,3 +10,4 @@ staticfiles/
 bin/
 cookies.txt
 *.cookies.txt
+AGENTS.md
