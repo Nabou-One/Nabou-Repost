@@ -1,9 +1,11 @@
 import shutil
 import tempfile
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+from django.core.management import call_command
 from django.http import Http404
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -295,3 +297,58 @@ class CookieCronViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["alerted"])
         alert.assert_called_once_with(force=False)
+
+
+class PrepareCookiesCommandTests(TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp(prefix="nabou-prepare-")
+        self.addCleanup(shutil.rmtree, self.temp_dir, True)
+        self.source = Path(self.temp_dir) / "cookies.txt"
+        self.output = Path(self.temp_dir) / "cookies-long.txt"
+
+        now = datetime.now(timezone.utc)
+        long_expiry = int((now + timedelta(days=300)).timestamp())
+        short_expiry = int((now + timedelta(days=20)).timestamp())
+        expired = int((now - timedelta(days=1)).timestamp())
+        self.source.write_text(
+            "# Netscape HTTP Cookie File\n"
+            f"#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t{long_expiry}\tSID\tsecret\n"
+            f"#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t{short_expiry}\t__Secure-1PSIDTS\trotating\n"
+            f".youtube.com\tTRUE\t/\tFALSE\t{expired}\tOLD\tgone\n"
+            ".youtube.com\tTRUE\t/\tFALSE\t0\tSESSION\ttemporary\n"
+            ".example.com\tTRUE\t/\tFALSE\t{long_expiry}\tOTHER\tvalue\n",
+            encoding="utf-8",
+        )
+
+    def test_command_keeps_persistent_cookies_and_drops_expired(self):
+        out = StringIO()
+        call_command(
+            "prepare_cookies",
+            str(self.source),
+            str(self.output),
+            "--drop-session",
+            stdout=out,
+        )
+
+        content = self.output.read_text(encoding="utf-8")
+        self.assertIn("SID", content)
+        self.assertIn("__Secure-1PSIDTS", content)
+        self.assertIn("#HttpOnly_.youtube.com", content)
+        self.assertNotIn("OLD", content)
+        self.assertNotIn("SESSION", content)
+        self.assertIn("Durée de vie effective", out.getvalue())
+        self.assertIn("__Secure-1PSIDTS", out.getvalue())
+
+    def test_command_can_keep_only_google_domains(self):
+        out = StringIO()
+        call_command(
+            "prepare_cookies",
+            str(self.source),
+            str(self.output),
+            "--only-google",
+            stdout=out,
+        )
+
+        content = self.output.read_text(encoding="utf-8")
+        self.assertNotIn("example.com", content)
+        self.assertIn("SID", content)

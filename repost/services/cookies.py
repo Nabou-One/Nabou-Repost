@@ -70,7 +70,10 @@ def parse_cookies(text: str) -> list[dict]:
         line = raw_line.strip()
         if not line:
             continue
+
+        http_only = False
         if line.startswith("#HttpOnly_"):
+            http_only = True
             line = line[len("#HttpOnly_") :]
         elif line.startswith("#"):
             continue
@@ -79,7 +82,7 @@ def parse_cookies(text: str) -> list[dict]:
         if len(parts) < 7:
             continue
 
-        domain, _flag, path, _secure, expiry, name, _value = parts[:7]
+        domain, flag, path, secure, expiry, name, value = parts[:7]
         try:
             expiry_ts = int(expiry)
         except ValueError:
@@ -88,8 +91,12 @@ def parse_cookies(text: str) -> list[dict]:
         cookies.append(
             {
                 "domain": domain,
+                "flag": flag,
                 "path": path,
+                "secure": secure,
                 "name": name,
+                "value": value,
+                "http_only": http_only,
                 "expiry": expiry_ts,
                 "expires_at": (
                     datetime.fromtimestamp(expiry_ts, tz=timezone.utc)

@@ -152,6 +152,24 @@ contourner le blocage, à ajouter dans **Render → Environment** :
 > utilisez un compte Google dédié, ne vous déconnectez pas, ne changez pas le
 > mot de passe et gardez le compte actif.
 
+### Garder les cookies les plus durables
+
+Il n'est pas possible de ne garder que les cookies qui expirent le plus tard :
+YouTube a besoin du jeu complet pour reconnaître la session. En revanche, on
+peut retirer les cookies déjà expirés et les cookies de session, puis vérifier
+quel cookie d'authentification expire en premier.
+
+```powershell
+python manage.py prepare_cookies cookies.txt cookies-long.txt --drop-session
+```
+
+La commande affiche la date d'expiration de chaque cookie d'authentification,
+la durée de vie effective du fichier (le cookie le plus court) et le cookie le
+plus long. Utilisez ensuite `cookies-long.txt` comme Secret File.
+
+> Retirer les cookies de session peut casser l'authentification. Testez un
+> téléchargement après ; si cela échoue, relancez sans `--drop-session`.
+
 ### Alerte Telegram avant expiration des cookies
 
 L'application lit la date d'expiration des cookies d'authentification et envoie
@@ -167,7 +185,8 @@ Variables à ajouter dans **Render → Environment** :
 | `TELEGRAM_CHAT_ID` | Identifiant du chat qui reçoit les alertes |
 | `COOKIE_ALERT_DAYS` | Seuil d'alerte en jours (défaut : 7) |
 | `CRON_TOKEN` | Jeton secret protégeant l'endpoint de vérification |
-| `TELEGRAM_NOTIFY_SUCCESS` | `true` pour un message après chaque téléchargement réussi (optionnel) |
+| `TELEGRAM_NOTIFY_SUCCESS` | `true` pour un message après chaque téléchargement réussi |
+| `TELEGRAM_NOTIFY_FAILURES` | `true` pour un message après un échec hors cookies (optionnel) |
 
 Vérification manuelle :
 
@@ -175,14 +194,17 @@ Vérification manuelle :
 python manage.py check_cookies
 ```
 
-Pour une vérification quotidienne gratuite, créez un cron sur
-[cron-job.org](https://cron-job.org) qui appelle chaque jour :
+Pour une vérification quotidienne gratuite, le dépôt contient le workflow
+`.github/workflows/check-cookies.yml`. Ajoutez le secret `CRON_TOKEN` dans
+**GitHub → Settings → Secrets and variables → Actions**, avec la même valeur
+que sur Render. Le workflow appelle chaque jour :
 
 ```
 https://nabou-repost.onrender.com/cron/check-cookies/<CRON_TOKEN>/
 ```
 
-L'alerte n'est envoyée qu'une fois par date d'expiration. L'ouverture de la
+Vous pouvez aussi utiliser [cron-job.org](https://cron-job.org) avec cette même
+URL. L'alerte n'est envoyée qu'une fois par date d'expiration. L'ouverture de la
 page d'accueil déclenche aussi la vérification.
 
 Si vous ne disposez ni d'un proxy ni de cookies, le plan gratuit de Render ne

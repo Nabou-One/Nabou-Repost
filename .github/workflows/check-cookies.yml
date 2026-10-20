@@ -1,0 +1,22 @@
+name: Vérification des cookies YouTube
+
+on:
+  schedule:
+    # Tous les jours à 09:00 UTC.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Appeler l'endpoint de vérification
+        env:
+          CRON_TOKEN: ${{ secrets.CRON_TOKEN }}
+        run: |
+          if [ -z "$CRON_TOKEN" ]; then
+            echo "::warning::Le secret CRON_TOKEN n'est pas configuré dans GitHub."
+            exit 0
+          fi
+          curl --fail --silent --show-error \
+            "https://nabou-repost.onrender.com/cron/check-cookies/${CRON_TOKEN}/"
