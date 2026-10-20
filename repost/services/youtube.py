@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlparse
 
 import yt_dlp
 from django.conf import settings
+from yt_dlp.networking.impersonate import ImpersonateTarget
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.formatters import SRTFormatter, TextFormatter
 
@@ -379,7 +380,10 @@ def download_video(job, directory: Path, progress_callback=None) -> tuple[dict, 
 
     impersonate = getattr(settings, "YTDLP_IMPERSONATE", "")
     if impersonate:
-        options["impersonate"] = impersonate
+        try:
+            options["impersonate"] = ImpersonateTarget.from_str(impersonate)
+        except ValueError:
+            logger.warning("Cible d'imitation yt-dlp invalide : %s", impersonate)
 
     # Pour les qualités basses, on privilégie la résolution la plus proche
     # du maximum demandé, même si yt-dlp doit utiliser son format de secours.
