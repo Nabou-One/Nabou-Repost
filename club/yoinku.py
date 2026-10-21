@@ -2,6 +2,7 @@ import requests
 from django.conf import settings
 
 BASE_URL = "https://yoinku.com/api/v1"
+DEFAULT_TIMEOUT = 45
 
 def get_headers():
     api_key = getattr(settings, "YOINKU_API_KEY", "")
@@ -17,9 +18,11 @@ def fetch_video_info(url):
     headers = get_headers()
     params = {"url": url}
     try:
-        response = requests.get(f"{BASE_URL}/info", headers=headers, params=params, timeout=15)
+        response = requests.get(f"{BASE_URL}/info", headers=headers, params=params, timeout=DEFAULT_TIMEOUT)
         response.raise_for_status()
         return response.json()
+    except requests.exceptions.Timeout:
+        return {"ok": False, "error": {"message": "Le serveur Yoinku a mis trop de temps à répondre (timeout). Veuillez réessayer."}}
     except requests.RequestException as e:
         error_msg = str(e)
         if hasattr(e, "response") and e.response is not None:
@@ -38,9 +41,11 @@ def fetch_transcript(url, lang="fr"):
     headers = get_headers()
     params = {"url": url, "lang": lang}
     try:
-        response = requests.get(f"{BASE_URL}/transcript", headers=headers, params=params, timeout=15)
+        response = requests.get(f"{BASE_URL}/transcript", headers=headers, params=params, timeout=DEFAULT_TIMEOUT)
         response.raise_for_status()
         return response.json()
+    except requests.exceptions.Timeout:
+        return {"ok": False, "error": {"message": "Le serveur Yoinku a mis trop de temps à répondre lors de la récupération des sous-titres."}}
     except requests.RequestException as e:
         error_msg = str(e)
         if hasattr(e, "response") and e.response is not None:
@@ -59,9 +64,11 @@ def fetch_download_url(url, format_id):
     headers = get_headers()
     params = {"url": url, "format": format_id}
     try:
-        response = requests.get(f"{BASE_URL}/download", headers=headers, params=params, timeout=15)
+        response = requests.get(f"{BASE_URL}/download", headers=headers, params=params, timeout=DEFAULT_TIMEOUT)
         response.raise_for_status()
         return response.json()
+    except requests.exceptions.Timeout:
+        return {"ok": False, "error": {"message": "Le serveur Yoinku a mis trop de temps à générer le lien de téléchargement."}}
     except requests.RequestException as e:
         error_msg = str(e)
         if hasattr(e, "response") and e.response is not None:

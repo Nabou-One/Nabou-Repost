@@ -34,17 +34,12 @@ def format_srt(chunks):
 def index(request):
     error = None
     video_data = None
-    transcript_data = None
     youtube_url = request.GET.get("url", "").strip()
 
     if youtube_url:
         info_res = fetch_video_info(youtube_url)
         if info_res.get("ok"):
             video_data = info_res.get("data", {})
-            # Récupérer également les sous-titres en français s'ils existent
-            trans_res = fetch_transcript(youtube_url, lang="fr")
-            if trans_res.get("ok"):
-                transcript_data = trans_res.get("data", {})
         else:
             err = info_res.get("error", {})
             error = err.get("message", "Impossible de récupérer les informations de la vidéo.")
@@ -52,7 +47,6 @@ def index(request):
     context = {
         "youtube_url": youtube_url,
         "video_data": video_data,
-        "transcript_data": transcript_data,
         "error": error,
     }
     return render(request, "club/index.html", context)
