@@ -219,6 +219,9 @@ def _yoinku_index_context(form) -> dict:
         "form": form,
         "jobs": YoinkuJob.objects.all()[:8],
         "daily_limit": 5,
+        "yoinku_configured": bool(
+            getattr(settings, "YOINKU_API_KEY", "").strip()
+        ),
     }
 
 

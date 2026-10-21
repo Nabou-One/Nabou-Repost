@@ -26,6 +26,15 @@
 <div class="layout">
     <section class="card">
         <h2>Nouveau téléchargement Yoinku</h2>
+
+        {% if not yoinku_configured %}
+            <div class="notice error">
+                L'API Yoinku n'est pas encore configurée sur ce serveur.
+                Ajoutez la variable <code>YOINKU_API_KEY</code> dans
+                <strong>Render → Environment</strong>, puis redéployez.
+            </div>
+        {% endif %}
+
         <form method="post" novalidate>
             {% csrf_token %}
 

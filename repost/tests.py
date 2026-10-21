@@ -438,6 +438,13 @@ class YoinkuViewTests(TestCase):
         response = self.client.get(reverse("repost:yoinku_index"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Nouveau téléchargement Yoinku")
+        self.assertNotContains(response, "n'est pas encore configurée")
+
+    @override_settings(YOINKU_API_KEY="")
+    def test_index_warns_when_api_key_is_missing(self):
+        response = self.client.get(reverse("repost:yoinku_index"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "n'est pas encore configurée")
 
     def test_index_post_renders_formats(self):
         with patch("repost.views.fetch_info", return_value=YOINKU_INFO) as info:
