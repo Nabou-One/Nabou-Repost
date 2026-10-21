@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nabou-Club - Téléchargeur YouTube & Sous-titres Français</title>
+    <style>
+        :root {
+            --primary-color: #6366f1;
+            --primary-hover: #4f46e5;
+            --bg-dark: #0f172a;
+            --card-bg: #1e293b;
+            --text-light: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-red: #ef4444;
+            --accent-green: #10b981;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem 1rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(to right, #818cf8, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+        }
+
+        .search-card {
+            background-color: var(--card-bg);
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            margin-bottom: 2rem;
+        }
+
+        .search-form {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 280px;
+            padding: 0.85rem 1.2rem;
+            border-radius: 0.5rem;
+            border: 1px solid #334155;
+            background-color: #0f172a;
+            color: var(--text-light);
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            border-color: var(--primary-color);
+        }
+
+        .btn {
+            padding: 0.85rem 1.5rem;
+            border-radius: 0.5rem;
+            border: none;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .btn-green {
+            background-color: var(--accent-green);
+            color: white;
+        }
+
+        .btn-green:hover {
+            background-color: #059669;
+        }
+
+        .error-banner {
+            background-color: rgba(239, 68, 68, 0.15);
+            border: 1px solid var(--accent-red);
+            color: #fca5a5;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .result-card {
+            background-color: var(--card-bg);
+            border-radius: 1rem;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .video-header {
+            display: flex;
+            gap: 1.5rem;
+            padding: 1.5rem;
+            border-bottom: 1px solid #334155;
+            flex-wrap: wrap;
+        }
+
+        .video-thumbnail {
+            width: 220px;
+            border-radius: 0.5rem;
+            object-fit: cover;
+        }
+
+        .video-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .video-title {
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+            line-height: 1.4;
+        }
+
+        .video-meta {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .options-section {
+            padding: 1.5rem;
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #cbd5e1;
+        }
+
+        .formats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .format-item {
+            background-color: #0f172a;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .format-details {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .badge {
+            background-color: #334155;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+        }
+
+        .subtitles-box {
+            background-color: #0f172a;
+            padding: 1.25rem;
+            border-radius: 0.5rem;
+            border: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        footer {
+            margin-top: auto;
+            padding-top: 2rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Nabou-Club</h1>
+        <p>Téléchargez vos vidéos YouTube avec sous-titres en Français</p>
+    </header>
+
+    <div class="container">
+        <div class="search-card">
+            <form method="GET" action="{% url 'index' %}" class="search-form">
+                <input
+                    type="url"
+                    name="url"
+                    class="search-input"
+                    placeholder="Collez le lien de la vidéo YouTube ici..."
+                    value="{{ youtube_url }}"
+                    required
+                >
+                <button type="submit" class="btn btn-primary">
+                    🔍 Analyser la vidéo
+                </button>
+            </form>
+        </div>
+
+        {% if error %}
+            <div class="error-banner">
+                ⚠️ {{ error }}
+            </div>
+        {% endif %}
+
+        {% if video_data %}
+            <div class="result-card">
+                <div class="video-header">
+                    {% if video_data.thumbnailUrl %}
+                        <img src="{{ video_data.thumbnailUrl }}" alt="{{ video_data.title }}" class="video-thumbnail">
+                    {% endif %}
+                    <div class="video-info">
+                        <h2 class="video-title">{{ video_data.title }}</h2>
+                        {% if video_data.durationSeconds %}
+                            <p class="video-meta">⏱️ Durée : {{ video_data.durationSeconds }} secondes</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="options-section">
+                    <h3 class="section-title">🎬 Choix de la résolution & Téléchargement Vidéo</h3>
+                    <div class="formats-grid">
+                        {% for fmt in video_data.formats %}
+                            <div class="format-item">
+                                <div class="format-details">
+                                    <strong>{{ fmt.quality|default:fmt.id }}</strong>
+                                    <span class="badge">{{ fmt.container|default:"mp4" }}</span>
+                                </div>
+                                <a href="{% url 'download_video' %}?url={{ youtube_url|urlencode }}&format={{ fmt.id }}" class="btn btn-primary" target="_blank">
+                                    ⬇️ Télécharger
+                                </a>
+                            </div>
+                        {% empty %}
+                            <p style="color: var(--text-muted);">Aucun format de téléchargement disponible.</p>
+                        {% endfor %}
+                    </div>
+
+                    <h3 class="section-title">💬 Sous-titres Français</h3>
+                    <div class="subtitles-box">
+                        <div>
+                            <strong>Sous-titres en Français (.SRT)</strong>
+                            <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.2rem;">
+                                {% if transcript_data %}
+                                    ✅ Sous-titres français disponibles prêts au téléchargement.
+                                {% else %}
+                                    ℹ️ Récupérer le fichier de sous-titres si disponible pour cette vidéo.
+                                {% endif %}
+                            </p>
+                        </div>
+                        <a href="{% url 'download_subtitle' %}?url={{ youtube_url|urlencode }}" class="btn btn-green">
+                            📄 Télécharger .SRT Français
+                        </a>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <footer>
+        <p>&copy; 2026 Nabou-Club - Propulsé par Yoinku API</p>
+    </footer>
+
+</body>
+</html>

@@ -1,20 +1,11 @@
 services:
   - type: web
-    name: nabou-repost
-    runtime: python
-    plan: free
-    buildCommand: "bash build.sh"
-    startCommand: "PATH=$PWD/bin:$PATH gunicorn nabou_repost.wsgi:application --bind 0.0.0.0:$PORT --worker-class gthread --workers 1 --threads 4 --timeout 180"
-    healthCheckPath: /healthz
-    autoDeployTrigger: commit
+    name: nabou-club
+    env: python
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn nabou_club.wsgi:application"
     envVars:
-      - key: SECRET_KEY
-        generateValue: true
-      - key: DEBUG
-        value: "False"
-      - key: YTDLP_IMPERSONATE
-        value: "chrome"
+      - key: PYTHON_VERSION
+        value: 3.12.0
       - key: YOINKU_API_KEY
-        sync: false
-      - key: PYTHONUNBUFFERED
-        value: "1"
+        value: yk_OQcdJNBJcDIkNfHbxbfCuuFsUmLYrVGgxvCudYjYegFxzNPLYjXqlJlPLWkiVavB
